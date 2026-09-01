@@ -8,7 +8,7 @@ Interaktive Lern-App zur Netzplantechnik für angehende Fachinformatiker:innen (
 npm start
 ```
 
-Danach `http://localhost:5173` öffnen. Die App benötigt keine Installation und speichert den Lernfortschritt lokal im Browser.
+Danach `http://localhost:4200` öffnen. Die App benötigt keine Installation und speichert den Lernfortschritt lokal im Browser.
 
 ## Begriffe
 
