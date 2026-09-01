@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Interaktiver Netzplan-Trainer für die IHK-Prüfung von FISI und FIAE." />
+    <title>Netzplan Trainer — IHK Baden-Württemberg</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#" aria-label="Startseite">
+          <span class="brand-mark">N</span>
+          <span><strong>Netzplan</strong><small>Prüfungstrainer</small></span>
+        </a>
+
+        <nav aria-label="Hauptnavigation">
+          <button class="nav-item active" data-view="training"><span>⌁</span> Training</button>
+          <button class="nav-item" data-view="learn"><span>□</span> Lernzettel</button>
+          <button class="nav-item" data-view="progress"><span>↗</span> Fortschritt</button>
+        </nav>
+
+        <div class="sidebar-card">
+          <span class="eyebrow">Deine Serie</span>
+          <div class="streak"><span>🔥</span><strong id="streak-count">0 Tage</strong></div>
+          <p>Ein Netzplan am Tag hält die Prüfungspanik fern.</p>
+        </div>
+
+        <div class="sidebar-footer">
+          <span class="status-dot"></span>
+          <span><strong>Prüfungsmodus</strong><small>FISI · FIAE · IHK BW</small></span>
+        </div>
+      </aside>
+
+      <main>
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Projektmanagement · Netzplantechnik</p>
+            <h1 id="page-title">Training</h1>
+          </div>
+          <div class="header-stats">
+            <div><span>Gelöst</span><strong id="solved-mini">0</strong></div>
+            <div><span>Trefferquote</span><strong id="accuracy-mini">–</strong></div>
+          </div>
+        </header>
+
+        <section id="training-view" class="view active">
+          <div class="task-toolbar">
+            <div class="task-meta">
+              <button class="icon-button" id="prev-task" aria-label="Vorherige Aufgabe">←</button>
+              <div>
+                <span class="eyebrow" id="task-number">AUFGABE 01 / 100</span>
+                <h2 id="task-title">Client-Rollout planen</h2>
+              </div>
+              <button class="icon-button" id="next-task" aria-label="Nächste Aufgabe">→</button>
+            </div>
+            <div class="toolbar-controls">
+              <div class="segmented mode-switch" aria-label="Aufgabentyp">
+                <button data-mode="calculate" class="active">Berechnen</button>
+                <button data-mode="build">Aufbauen</button>
+              </div>
+              <div class="segmented" aria-label="Schwierigkeitsgrad">
+                <button data-level="easy" class="active">Basis</button>
+                <button data-level="medium">Prüfung</button>
+                <button data-level="hard">Profi</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="instruction-card">
+            <div class="instruction-icon">i</div>
+            <div>
+              <strong id="instruction-title">Ergänze die fehlenden Werte.</strong>
+              <p id="instruction-text">Berechne Vorwärts- und Rückwärtsrechnung sowie Gesamtpuffer und freien Puffer. Zeitangaben in Tagen.</p>
+            </div>
+            <button class="text-button" id="toggle-table">Vorgangsliste anzeigen</button>
+          </div>
+
+          <div id="task-table-wrap" class="task-table-wrap" hidden>
+            <table>
+              <thead><tr><th>Vorgang</th><th>Arbeitspaket</th><th>Dauer</th><th>Vorgänger</th></tr></thead>
+              <tbody id="task-table"></tbody>
+            </table>
+          </div>
+
+          <div class="workspace-card">
+            <div class="workspace-head">
+              <div class="legend">
+                <span><i class="legend-line critical"></i> Kritischer Pfad</span>
+                <span><i class="legend-line normal"></i> Abhängigkeit</span>
+              </div>
+              <div class="zoom-note">Alle Angaben in Tagen</div>
+            </div>
+            <div class="network-scroll">
+              <div id="network" class="network" aria-label="Interaktiver Netzplan"></div>
+            </div>
+          </div>
+
+          <div id="feedback" class="feedback" role="status" hidden></div>
+
+          <div class="actionbar">
+            <div class="completion"><span id="filled-count">0</span> von <span id="field-count">0</span> Feldern ausgefüllt</div>
+            <div>
+              <button class="button secondary" id="hint-button">Hinweis</button>
+              <button class="button primary" id="check-button">Antwort prüfen <span>→</span></button>
+            </div>
+          </div>
+        </section>
+
+        <section id="learn-view" class="view">
+          <div class="learn-hero">
+            <span class="pill">IHK-CHECKLISTE</span>
+            <h2>Einmal vorwärts. Einmal rückwärts. Dann die Puffer.</h2>
+            <p>Mit diesem festen Ablauf löst du jeden Vorgangsknoten.</p>
+          </div>
+          <div class="formula-grid">
+            <article><span>01 · VORWÄRTSRECHNUNG</span><h3>Früheste Zeitpunkte</h3><code>FAZ = max(FEZ der Vorgänger)</code><code>FEZ = FAZ + Dauer</code><p>Bei mehreren Vorgängern zählt immer der größte FEZ.</p></article>
+            <article><span>02 · RÜCKWÄRTSRECHNUNG</span><h3>Späteste Zeitpunkte</h3><code>SEZ = min(SAZ der Nachfolger)</code><code>SAZ = SEZ − Dauer</code><p>Beim Endvorgang entspricht der SEZ der Projektdauer.</p></article>
+            <article class="accent"><span>03 · GESAMTPUFFER</span><h3>Wie lange darf ich warten?</h3><code>GP = SAZ − FAZ</code><code>GP = SEZ − FEZ</code><p>GP = 0 kennzeichnet einen Vorgang auf dem kritischen Pfad.</p></article>
+            <article class="accent"><span>04 · FREIER PUFFER</span><h3>Ohne Folgen für Nachfolger</h3><code>FP = min(FAZ Nachfolger) − FEZ</code><p>Der freie Puffer verschiebt keinen direkten Nachfolger. Beim Endvorgang ist FP = 0.</p></article>
+          </div>
+          <div class="node-explainer">
+            <div class="sample-node"><b>A</b><span>FAZ</span><span>FEZ</span><em>DAUER</em><span>SAZ</span><span>SEZ</span><span>GP</span><span>FP</span></div>
+            <div><span class="eyebrow">SO LIEST DU DEN KNOTEN</span><h3>Alle Prüfungswerte auf einen Blick</h3><p>Oben stehen die frühesten, unten die spätesten Zeitpunkte. Gesamtpuffer und freier Puffer bilden die letzte Zeile. Die Dauer steht bewusst im Zentrum.</p></div>
+          </div>
+        </section>
+
+        <section id="progress-view" class="view">
+          <div class="progress-grid">
+            <article><span>Bearbeitete Aufgaben</span><strong id="stat-solved">0</strong><small>von 100</small></article>
+            <article><span>Richtige Prüfungen</span><strong id="stat-correct">0</strong><small>vollständig korrekt</small></article>
+            <article><span>Trefferquote</span><strong id="stat-accuracy">–</strong><small>über alle Prüfungen</small></article>
+          </div>
+          <div class="progress-panel">
+            <div><span class="eyebrow">AUFGABENKATALOG</span><h2>100 Aufgaben. Dein Tempo.</h2><p>Wähle eine Aufgabe direkt aus. Farben zeigen deinen Lernstand.</p></div>
+            <div id="task-grid" class="task-grid"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>
