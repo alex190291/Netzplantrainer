@@ -1,6 +1,8 @@
 # Netzplan Trainer
 
-Interaktive Lern-App zur Netzplantechnik für angehende Fachinformatiker:innen (FISI/FIAE). Enthalten sind 100 reproduzierbare Aufgaben in drei Schwierigkeitsstufen, ein Aufbaumodus für Abhängigkeiten, Vorwärts- und Rückwärtsrechnung, Gesamtpuffer, freier Puffer und kritischer Pfad.
+Interaktive Lern-App zur Netzplantechnik für angehende Fachinformatiker:innen (FISI/FIAE). Enthalten sind 100 reproduzierbare Aufgaben in drei Schwierigkeitsstufen, ein visueller Netzplan-Editor, Vorwärts- und Rückwärtsrechnung, Gesamtpuffer, freier Puffer und kritischer Pfad.
+
+Im Aufbaumodus lassen sich Vorgangsknoten frei platzieren und verschieben, über Ein- und Ausgänge verknüpfen und vollständig ausfüllen. Alle Bearbeitungsschritte unterstützen Undo und Redo – auch per `Strg+Z`, `Strg+Y` und `Strg+Umschalt+Z`.
 
 ## Start
 

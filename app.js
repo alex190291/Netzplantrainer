@@ -66,7 +66,8 @@ function calculate(nodes) {
 
 const tasks = Array.from({ length: 100 }, (_, i) => makeTask(i));
 const saved = JSON.parse(localStorage.getItem("netzplan-progress") || "{}");
-const state = { task: Number(saved.lastTask || 0), level: saved.level || "medium", mode: saved.mode || "calculate", attempts: saved.attempts || {}, solved: saved.solved || {}, checked: false, selectedNode: null, userEdges: new Set() };
+const requestedMode = new URLSearchParams(location.search).get("mode");
+const state = { task: Number(saved.lastTask || 0), level: saved.level || "medium", mode: ["calculate", "build"].includes(requestedMode) ? requestedMode : saved.mode || "calculate", attempts: saved.attempts || {}, solved: saved.solved || {}, checked: false, selectedNode: null, build: null, history: [], historyIndex: -1 };
 
 const el = id => document.getElementById(id);
 
@@ -94,20 +95,25 @@ function renderTask() {
   const hiddenFields = LEVELS[state.level].hide;
   state.checked = false;
   state.selectedNode = null;
-  state.userEdges = new Set();
+  if (state.mode === "build") initBuild();
   el("task-number").textContent = `AUFGABE ${String(task.id).padStart(2, "0")} / 100`;
   el("task-title").textContent = task.title;
   el("feedback").hidden = true;
   document.querySelectorAll("[data-level]").forEach(b => b.classList.toggle("active", b.dataset.level === state.level));
   document.querySelectorAll("[data-mode]").forEach(b => b.classList.toggle("active", b.dataset.mode === state.mode));
   el("instruction-title").textContent = state.mode === "build" ? "Baue den Netzplan aus den Vorgängern auf." : "Ergänze die fehlenden Werte.";
-  el("instruction-text").textContent = state.mode === "build" ? "Klicke zuerst den Vorgänger und danach den Nachfolger an. Ein erneuter Klick auf dieselbe Verbindung entfernt sie." : "Berechne Vorwärts- und Rückwärtsrechnung sowie Gesamtpuffer und freien Puffer. Zeitangaben in Tagen.";
+  el("instruction-text").textContent = state.mode === "build" ? "Platziere die Vorgänge, ziehe sie an die richtige Position und verbinde Ausgang ○ mit Eingang ○. Fülle danach alle Knotenwerte aus." : "Berechne Vorwärts- und Rückwärtsrechnung sowie Gesamtpuffer und freien Puffer. Zeitangaben in Tagen.";
   el("task-table-wrap").hidden = state.mode !== "build";
+  el("build-editor-bar").hidden = state.mode !== "build";
   el("toggle-table").textContent = state.mode === "build" ? "Vorgangsliste ausblenden" : "Vorgangsliste anzeigen";
 
   el("task-table").innerHTML = task.nodes.map(n => `<tr><td><strong>${n.id}</strong></td><td>${n.name}</td><td>${n.duration} Tage</td><td>${n.preds.length ? n.preds.map(p => task.nodes[p].id).join(", ") : "–"}</td></tr>`).join("");
-  const { positions, width, height } = layoutNodes(task.nodes);
+  const calculatedLayout = layoutNodes(task.nodes);
+  const positions = calculatedLayout.positions;
+  const width = state.mode === "build" ? 1120 : calculatedLayout.width;
+  const height = state.mode === "build" ? 600 : calculatedLayout.height;
   const network = el("network");
+  network.classList.remove("show-critical");
   network.style.width = `${width}px`;
   network.style.height = `${height}px`;
 
@@ -124,7 +130,7 @@ function renderTask() {
   }).join("");
 
   const nodes = task.nodes.map((node, i) => {
-    if (state.mode === "build") return `<button class="node build-node" data-build-node="${i}" style="left:${positions[i].x}px;top:${positions[i].y + 28}px"><div class="node-head"><span class="node-id">${node.id}</span><span class="node-name">Vorgang</span></div><div class="build-body"><span>${node.name}<strong>${node.duration} T</strong></span></div><span class="build-duration">${node.duration}</span></button>`;
+    if (state.mode === "build") return buildNodeMarkup(node, i);
     const fields = hiddenFields.map(field => fieldCell(task.id, i, field, node[field])).join("");
     const known = Object.keys(FIELD_LABELS).filter(f => !hiddenFields.includes(f)).map(field => fieldCell(task.id, i, field, node[field], true)).join("");
     const ordered = ["faz", "fez", "saz", "sez", "gp", "fp"].map(field => hiddenFields.includes(field) ? fields.match(new RegExp(`<div class="node-cell" data-field="${field}">[\\s\\S]*?<\\/div>`))?.[0] : known.match(new RegExp(`<div class="node-cell" data-field="${field}">[\\s\\S]*?<\\/div>`))?.[0]).join("");
@@ -132,8 +138,8 @@ function renderTask() {
   }).join("");
   network.innerHTML = `<svg class="edge-layer" viewBox="0 0 ${width} ${height}">${marker}${edges}</svg>${nodes}`;
   network.querySelectorAll("input").forEach(input => input.addEventListener("input", updateFilled));
-  network.querySelectorAll("[data-build-node]").forEach(node => node.addEventListener("click", () => selectBuildNode(Number(node.dataset.buildNode))));
-  el("field-count").textContent = state.mode === "build" ? targetEdges.length : task.nodes.length * hiddenFields.length;
+  if (state.mode === "build") bindBuildEvents();
+  el("field-count").textContent = state.mode === "build" ? task.nodes.length * 6 + targetEdges.length : task.nodes.length * hiddenFields.length;
   updateFilled();
   save();
 }
@@ -144,38 +150,162 @@ function fieldCell(taskId, nodeIndex, field, value, known = false) {
 }
 
 function updateFilled() {
-  el("filled-count").textContent = state.mode === "build" ? state.userEdges.size : [...el("network").querySelectorAll("input")].filter(i => i.value !== "").length;
+  const buildFilled = state.build ? Object.values(state.build.values).filter(value => value !== "").length + state.build.edges.size : 0;
+  el("filled-count").textContent = state.mode === "build" ? buildFilled : [...el("network").querySelectorAll("input")].filter(i => i.value !== "").length;
 }
 
-function selectBuildNode(index) {
-  if (state.selectedNode === null) {
-    state.selectedNode = index;
-    el("network").querySelector(`[data-build-node="${index}"]`).classList.add("selected");
-    return;
-  }
-  if (state.selectedNode === index) {
-    state.selectedNode = null;
-    renderBuildEdges();
-    return;
-  }
-  const key = `${state.selectedNode}-${index}`;
-  state.userEdges.has(key) ? state.userEdges.delete(key) : state.userEdges.add(key);
+function initBuild() {
+  state.build = { positions: {}, values: {}, edges: new Set() };
+  state.history = [];
+  state.historyIndex = -1;
+  commitBuild();
+}
+
+function snapshotBuild() {
+  return JSON.stringify({ positions: state.build.positions, values: state.build.values, edges: [...state.build.edges].sort() });
+}
+
+function commitBuild() {
+  const snapshot = snapshotBuild();
+  if (state.history[state.historyIndex] === snapshot) return updateHistoryButtons();
+  state.history = state.history.slice(0, state.historyIndex + 1);
+  state.history.push(snapshot);
+  state.historyIndex++;
+  updateHistoryButtons();
+}
+
+function restoreBuild(snapshot) {
+  const data = JSON.parse(snapshot);
+  state.build = { positions: data.positions, values: data.values, edges: new Set(data.edges) };
   state.selectedNode = null;
+  renderBuildCanvas();
+}
+
+function undoBuild() {
+  if (state.historyIndex <= 0) return;
+  restoreBuild(state.history[--state.historyIndex]);
+  updateHistoryButtons();
+}
+
+function redoBuild() {
+  if (state.historyIndex >= state.history.length - 1) return;
+  restoreBuild(state.history[++state.historyIndex]);
+  updateHistoryButtons();
+}
+
+function updateHistoryButtons() {
+  el("undo-button").disabled = state.historyIndex <= 0;
+  el("redo-button").disabled = state.historyIndex >= state.history.length - 1;
+}
+
+function buildNodeMarkup(node, index) {
+  const pos = state.build.positions[index];
+  if (!pos) return "";
+  const cells = Object.keys(FIELD_LABELS).map(field => {
+    const value = state.build.values[`${index}.${field}`] ?? "";
+    return `<div class="node-cell" data-field="${field}"><label>${FIELD_LABELS[field]}</label><input type="number" inputmode="numeric" value="${value}" data-build-value="${index}.${field}" data-answer="${node[field]}" aria-label="${FIELD_LABELS[field]} Vorgang ${node.id}"></div>`;
+  }).join("");
+  return `<div class="node build-node" data-build-node="${index}" data-critical="${node.gp === 0}" style="left:${pos.x}px;top:${pos.y}px"><button class="node-remove" data-remove-node="${index}" aria-label="Knoten ${node.id} entfernen">×</button><button class="connector in" data-connect="in" data-node="${index}" aria-label="Verbindung zu ${node.id}">○</button><div class="node-head" data-drag-handle="${index}"><span class="node-id">${node.id}</span><span class="node-name" title="${node.name}">${node.name}</span></div><div class="node-grid">${cells}</div><span class="duration" title="Dauer">${node.duration}</span><button class="connector out ${state.selectedNode === index ? "active" : ""}" data-connect="out" data-node="${index}" aria-label="Verbindung von ${node.id}">○</button></div>`;
+}
+
+function renderBuildCanvas() {
+  const task = tasks[state.task];
+  const network = el("network");
+  network.classList.remove("show-critical");
+  network.querySelectorAll(".build-node").forEach(node => node.remove());
+  network.insertAdjacentHTML("beforeend", task.nodes.map((node, i) => buildNodeMarkup(node, i)).join(""));
   renderBuildEdges();
+  renderBuildPalette();
+  bindBuildEvents();
   updateFilled();
 }
 
 function renderBuildEdges() {
-  const task = tasks[state.task];
-  const { positions, width, height } = layoutNodes(task.nodes);
-  const paths = [...state.userEdges].map(key => {
+  const paths = [...state.build.edges].map(key => {
     const [p, i] = key.split("-").map(Number);
-    const from = positions[p], to = positions[i];
-    const x1 = from.x + 154, y1 = from.y + 102, x2 = to.x, y2 = to.y + 102, bend = (x1 + x2) / 2;
+    const from = state.build.positions[p], to = state.build.positions[i];
+    if (!from || !to) return "";
+    const x1 = from.x + 154, y1 = from.y + 74, x2 = to.x, y2 = to.y + 74, bend = (x1 + x2) / 2;
     return `<path class="edge" d="M ${x1} ${y1} C ${bend} ${y1}, ${bend} ${y2}, ${x2 - 7} ${y2}" marker-end="url(#arrow)"/>`;
   }).join("");
   el("network").querySelector(".edge-layer").innerHTML = `<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#9aa59f"/></marker></defs>${paths}`;
-  el("network").querySelectorAll("[data-build-node]").forEach((node, i) => node.classList.toggle("selected", i === state.selectedNode));
+}
+
+function renderBuildPalette() {
+  const task = tasks[state.task];
+  el("build-palette").innerHTML = task.nodes.map((node, i) => state.build.positions[i] ? "" : `<button class="palette-node" data-place-node="${i}"><b>${node.id}</b>${node.name}</button>`).join("") || `<span class="editor-label">Alle Vorgänge platziert</span>`;
+  el("build-palette").querySelectorAll("[data-place-node]").forEach(button => button.addEventListener("click", () => placeBuildNode(Number(button.dataset.placeNode))));
+}
+
+function placeBuildNode(index) {
+  const suggested = layoutNodes(tasks[state.task].nodes).positions[index];
+  state.build.positions[index] = { x: Math.min(940, suggested.x), y: Math.max(28, suggested.y) };
+  commitBuild();
+  renderBuildCanvas();
+}
+
+function removeBuildNode(index) {
+  delete state.build.positions[index];
+  Object.keys(state.build.values).filter(key => key.startsWith(`${index}.`)).forEach(key => delete state.build.values[key]);
+  state.build.edges = new Set([...state.build.edges].filter(edge => !edge.startsWith(`${index}-`) && !edge.endsWith(`-${index}`)));
+  state.selectedNode = null;
+  commitBuild();
+  renderBuildCanvas();
+}
+
+function connectBuildNode(index, side) {
+  if (side === "out") {
+    state.selectedNode = state.selectedNode === index ? null : index;
+    renderBuildCanvas();
+    return;
+  }
+  if (state.selectedNode === null || state.selectedNode === index) return;
+  const key = `${state.selectedNode}-${index}`;
+  state.build.edges.has(key) ? state.build.edges.delete(key) : state.build.edges.add(key);
+  state.selectedNode = null;
+  commitBuild();
+  renderBuildCanvas();
+}
+
+function bindBuildEvents() {
+  renderBuildPalette();
+  el("network").querySelectorAll("[data-connect]").forEach(button => button.addEventListener("click", event => { event.stopPropagation(); connectBuildNode(Number(button.dataset.node), button.dataset.connect); }));
+  el("network").querySelectorAll("[data-remove-node]").forEach(button => button.addEventListener("click", event => { event.stopPropagation(); removeBuildNode(Number(button.dataset.removeNode)); }));
+  el("network").querySelectorAll("[data-build-value]").forEach(input => {
+    input.addEventListener("input", () => { state.build.values[input.dataset.buildValue] = input.value; updateFilled(); });
+    input.addEventListener("change", commitBuild);
+  });
+  el("network").querySelectorAll("[data-drag-handle]").forEach(handle => handle.addEventListener("pointerdown", startNodeDrag));
+  updateHistoryButtons();
+}
+
+function startNodeDrag(event) {
+  if (event.button !== 0) return;
+  const handle = event.currentTarget;
+  const index = Number(handle.dataset.dragHandle);
+  const node = handle.closest(".build-node");
+  const start = { pointerX: event.clientX, pointerY: event.clientY, nodeX: state.build.positions[index].x, nodeY: state.build.positions[index].y };
+  let moved = false;
+  node.classList.add("dragging");
+  handle.setPointerCapture(event.pointerId);
+  const move = moveEvent => {
+    const x = Math.max(4, Math.min(962, start.nodeX + moveEvent.clientX - start.pointerX));
+    const y = Math.max(4, Math.min(432, start.nodeY + moveEvent.clientY - start.pointerY));
+    state.build.positions[index] = { x, y };
+    node.style.left = `${x}px`; node.style.top = `${y}px`;
+    moved = moved || x !== start.nodeX || y !== start.nodeY;
+    renderBuildEdges();
+  };
+  const end = () => {
+    node.classList.remove("dragging");
+    handle.removeEventListener("pointermove", move);
+    handle.removeEventListener("pointerup", end);
+    handle.removeEventListener("pointercancel", end);
+    if (moved) commitBuild();
+  };
+  handle.addEventListener("pointermove", move);
+  handle.addEventListener("pointerup", end);
+  handle.addEventListener("pointercancel", end);
 }
 
 function checkAnswers() {
@@ -208,18 +338,28 @@ function checkAnswers() {
 function checkBuild() {
   const task = tasks[state.task];
   const answers = new Set(task.nodes.flatMap((n, i) => n.preds.map(p => `${p}-${i}`)));
-  const missing = [...answers].filter(edge => !state.userEdges.has(edge));
-  const extra = [...state.userEdges].filter(edge => !answers.has(edge));
+  const missingNodes = task.nodes.filter((_, i) => !state.build.positions[i]);
+  const missing = [...answers].filter(edge => !state.build.edges.has(edge));
+  const extra = [...state.build.edges].filter(edge => !answers.has(edge));
+  let wrongValues = 0;
+  el("network").querySelectorAll("[data-build-value]").forEach(input => {
+    const correct = input.value !== "" && Number(input.value) === Number(input.dataset.answer);
+    input.classList.toggle("correct", correct);
+    input.classList.toggle("wrong", !correct);
+    if (!correct) wrongValues++;
+  });
+  wrongValues += missingNodes.length * 6;
   state.attempts[state.task] = (state.attempts[state.task] || 0) + 1;
   const feedback = el("feedback");
   feedback.hidden = false;
-  if (!missing.length && !extra.length) {
+  if (!missingNodes.length && !missing.length && !extra.length && !wrongValues) {
     state.solved[state.task] = true;
+    el("network").classList.add("show-critical");
     feedback.className = "feedback success";
-    feedback.innerHTML = "<strong>Netzplan korrekt aufgebaut.</strong> Alle Vorgängerbeziehungen stimmen. Wechsle jetzt zu „Berechnen“, um die Zeitwerte und Puffer zu ergänzen.";
+    feedback.innerHTML = "<strong>Netzplan vollständig korrekt.</strong> Platzierung, Abhängigkeiten, Zeitwerte und beide Puffer stimmen. Der kritische Pfad ist jetzt orange markiert.";
   } else {
     feedback.className = "feedback error";
-    feedback.innerHTML = `<strong>Die Struktur stimmt noch nicht.</strong> ${missing.length} Verbindung${missing.length === 1 ? " fehlt" : "en fehlen"}, ${extra.length} ${extra.length === 1 ? "ist" : "sind"} zu viel.`;
+    feedback.innerHTML = `<strong>Noch nicht vollständig.</strong> ${missingNodes.length} Knoten unplatziert, ${missing.length} Verbindung${missing.length === 1 ? " fehlt" : "en fehlen"}, ${extra.length} ${extra.length === 1 ? "ist" : "sind"} zu viel und ${wrongValues} Knotenwert${wrongValues === 1 ? " ist" : "e sind"} falsch oder leer.`;
   }
   save(); renderStats();
 }
@@ -230,9 +370,19 @@ function showHint() {
   feedback.className = "feedback hint";
   if (state.mode === "build") {
     const task = tasks[state.task];
+    const unplaced = task.nodes.findIndex((_, i) => !state.build.positions[i]);
+    if (unplaced >= 0) {
+      feedback.innerHTML = `<strong>Editor-Tipp:</strong> Platziere zuerst Vorgang ${task.nodes[unplaced].id} aus der Leiste über dem Netzplan.`;
+      return;
+    }
     const answers = task.nodes.flatMap((n, i) => n.preds.map(p => `${p}-${i}`));
-    const missing = answers.find(edge => !state.userEdges.has(edge));
-    feedback.innerHTML = missing ? `<strong>Struktur-Tipp:</strong> Laut Vorgangsliste führt eine Verbindung von ${task.nodes[Number(missing.split("-")[0])].id} zu ${task.nodes[Number(missing.split("-")[1])].id}.` : "<strong>Struktur-Tipp:</strong> Prüfe, ob du eine zusätzliche Verbindung eingezeichnet hast.";
+    const missing = answers.find(edge => !state.build.edges.has(edge));
+    if (missing) {
+      feedback.innerHTML = `<strong>Struktur-Tipp:</strong> Laut Vorgangsliste führt eine Verbindung von ${task.nodes[Number(missing.split("-")[0])].id} zu ${task.nodes[Number(missing.split("-")[1])].id}.`;
+      return;
+    }
+    const missingValue = Object.keys(FIELD_LABELS).flatMap(field => task.nodes.map((_, i) => `${i}.${field}`)).find(key => state.build.values[key] === undefined || state.build.values[key] === "");
+    feedback.innerHTML = missingValue ? `<strong>Rechentipp:</strong> Ergänze als Nächstes ${FIELD_LABELS[missingValue.split(".")[1]]} bei Vorgang ${task.nodes[Number(missingValue.split(".")[0])].id}.` : "<strong>Editor-Tipp:</strong> Prüfe zusätzliche Verbindungen und rot markierte Werte.";
     return;
   }
   const firstEmpty = el("network").querySelector("input:not(.correct)");
@@ -272,6 +422,18 @@ el("prev-task").addEventListener("click", () => { state.task = (state.task + 99)
 el("next-task").addEventListener("click", () => { state.task = (state.task + 1) % 100; renderTask(); });
 el("check-button").addEventListener("click", checkAnswers);
 el("hint-button").addEventListener("click", showHint);
+el("undo-button").addEventListener("click", undoBuild);
+el("redo-button").addEventListener("click", redoBuild);
+document.addEventListener("keydown", event => {
+  if (state.mode !== "build" || !(event.ctrlKey || event.metaKey)) return;
+  if (event.key.toLowerCase() === "z") {
+    event.preventDefault();
+    event.shiftKey ? redoBuild() : undoBuild();
+  } else if (event.key.toLowerCase() === "y") {
+    event.preventDefault();
+    redoBuild();
+  }
+});
 el("toggle-table").addEventListener("click", () => {
   const wrap = el("task-table-wrap");
   wrap.hidden = !wrap.hidden;
