@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
+	"sync"
 	"time"
 )
 
@@ -51,8 +52,12 @@ func run(ctx context.Context, port int, launchBrowser bool) error {
 
 	actualPort := listener.Addr().(*net.TCPAddr).Port
 	address := fmt.Sprintf("http://127.0.0.1:%d/", actualPort)
+	quit := make(chan struct{})
+	var quitOnce sync.Once
 	server := &http.Server{
-		Handler:           appHandler(),
+		Handler: appHandler(func() {
+			quitOnce.Do(func() { close(quit) })
+		}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -79,6 +84,10 @@ func run(ctx context.Context, port int, launchBrowser bool) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		return server.Shutdown(shutdownCtx)
+	case <-quit:
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		return server.Shutdown(shutdownCtx)
 	}
 }
 
@@ -101,9 +110,46 @@ func listen(port int) (net.Listener, error) {
 	return nil, fmt.Errorf("cannot listen on %s: %w", address, err)
 }
 
-func appHandler() http.Handler {
+func appHandler(shutdown func()) http.Handler {
 	files := http.FileServer(http.FS(webAssets))
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/__launcher" {
+			if request.Method != http.MethodGet {
+				response.Header().Set("Allow", "GET")
+				http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			response.Header().Set("Cache-Control", "no-store")
+			response.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(response, `{"canQuit":true}`)
+			return
+		}
+
+		if request.URL.Path == "/__quit" {
+			if shutdown == nil {
+				http.NotFound(response, request)
+				return
+			}
+			if request.Method != http.MethodPost {
+				response.Header().Set("Allow", "POST")
+				http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			if request.Header.Get("X-Netzplan-Launcher") != "quit" {
+				http.Error(response, "forbidden", http.StatusForbidden)
+				return
+			}
+
+			response.Header().Set("Content-Type", "application/json")
+			response.WriteHeader(http.StatusAccepted)
+			fmt.Fprint(response, `{"shuttingDown":true}`)
+			if flusher, ok := response.(http.Flusher); ok {
+				flusher.Flush()
+			}
+			shutdown()
+			return
+		}
+
 		if request.Method != http.MethodGet && request.Method != http.MethodHead {
 			response.Header().Set("Allow", "GET, HEAD")
 			http.Error(response, "method not allowed", http.StatusMethodNotAllowed)

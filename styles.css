@@ -35,6 +35,16 @@ nav { display: grid; gap: 7px; }
 .sidebar-footer strong, .sidebar-footer small { display: block; font-size: 11px; }
 .sidebar-footer small { color: #91b0a4; margin-top: 2px; }
 .status-dot { width: 8px; height: 8px; background: var(--lime); border-radius: 50%; box-shadow: 0 0 0 4px rgba(201,242,106,.13); }
+.quit-app { margin: 16px 8px 0; padding: 10px 12px; border: 1px solid rgba(255,255,255,.22); border-radius: 9px; background: transparent; color: #dcebe5; cursor: pointer; font-size: 11px; font-weight: 600; }
+.quit-app[hidden] { display: none; }
+.quit-app:hover { border-color: #f1a89f; background: rgba(196,71,58,.18); color: white; }
+.quit-app:disabled { cursor: wait; opacity: .65; }
+.quit-app span { margin-right: 6px; }
+.shutdown-screen { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: var(--paper); }
+.shutdown-card { width: min(460px, 100%); padding: 38px; border: 1px solid var(--line); border-radius: 16px; background: white; box-shadow: var(--shadow); text-align: center; }
+.shutdown-card .brand-mark { margin: 0 auto 20px; }
+.shutdown-card h1 { margin: 0 0 9px; font-size: 25px; }
+.shutdown-card p { margin: 0; color: var(--muted); font-size: 13px; }
 main { min-width: 0; padding: 34px clamp(24px, 4vw, 64px) 50px; }
 .topbar { max-width: 1240px; margin: 0 auto 28px; display: flex; align-items: end; justify-content: space-between; }
 .eyebrow { color: var(--green); font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
@@ -163,6 +173,7 @@ th { color: var(--muted); text-transform: uppercase; font-size: 9px; letter-spac
   .sidebar { position: static; height: auto; padding: 14px 18px; flex-direction: row; align-items: center; }
   .brand { margin: 0 auto 0 0; }
   .brand small, .sidebar-card, .sidebar-footer { display: none; }
+  .quit-app { position: fixed; right: 16px; bottom: 16px; z-index: 20; margin: 0; border-color: #b8c7c0; background: white; color: var(--green-dark); box-shadow: 0 5px 18px rgba(29,49,39,.18); }
   nav { display: flex; }
   .nav-item { padding: 10px; font-size: 0; }
   .nav-item span { font-size: 20px; width: auto; }

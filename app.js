@@ -415,6 +415,38 @@ function switchView(view) {
   if (view === "progress") renderStats();
 }
 
+async function enableLauncherControls() {
+  try {
+    const response = await fetch("/__launcher", { cache: "no-store" });
+    if (!response.ok || !(await response.json()).canQuit) return;
+
+    const button = el("quit-app");
+    button.hidden = false;
+    button.addEventListener("click", async () => {
+      if (!window.confirm("Netzplan Trainer wirklich beenden?")) return;
+
+      button.disabled = true;
+      button.textContent = "Wird beendet …";
+      try {
+        const quitResponse = await fetch("/__quit", {
+          method: "POST",
+          headers: { "X-Netzplan-Launcher": "quit" }
+        });
+        if (!quitResponse.ok) throw new Error(`HTTP ${quitResponse.status}`);
+
+        document.title = "Netzplan Trainer beendet";
+        document.body.innerHTML = `<div class="shutdown-screen"><section class="shutdown-card"><span class="brand-mark">N</span><h1>Netzplan Trainer wurde beendet.</h1><p>Du kannst dieses Browserfenster jetzt schließen.</p></section></div>`;
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = "⏻ App beenden";
+        window.alert(`Die App konnte nicht beendet werden: ${error.message}`);
+      }
+    });
+  } catch (_) {
+    // Development servers do not expose launcher controls.
+  }
+}
+
 document.querySelectorAll(".nav-item").forEach(b => b.addEventListener("click", () => switchView(b.dataset.view)));
 document.querySelectorAll("[data-level]").forEach(b => b.addEventListener("click", () => { state.level = b.dataset.level; renderTask(); }));
 document.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => { state.mode = b.dataset.mode; renderTask(); }));
@@ -442,3 +474,4 @@ el("toggle-table").addEventListener("click", () => {
 
 renderTask();
 renderStats();
+enableLauncherControls();

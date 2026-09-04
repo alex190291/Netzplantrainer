@@ -12,7 +12,7 @@ Der Go-Launcher enthält die komplette App, startet einen lokalen HTTP-Server un
 - macOS (Apple Silicon): `NetzplanTrainer-macos-arm64` doppelt anklicken
 - macOS (Intel): `NetzplanTrainer-macos-amd64` doppelt anklicken
 
-Der Launcher verwendet normalerweise `http://127.0.0.1:4200/`. Falls Port 4200 bereits belegt ist, wählt er selbstständig einen freien Port. Das Konsolenfenster muss geöffnet bleiben, solange die App verwendet wird.
+Der Launcher verwendet normalerweise `http://127.0.0.1:4200/`. Falls Port 4200 bereits belegt ist, wählt er selbstständig einen freien Port. Mit **App beenden** unten in der Seitenleiste wird der lokale Server sauber beendet. Alternativ kann das Konsolenfenster geschlossen oder dort `Strg+C` gedrückt werden.
 
 ### Programmdateien erstellen
 
